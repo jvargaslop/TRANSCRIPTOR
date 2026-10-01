@@ -1,5 +1,5 @@
 """
-Backend de transcripción con NVIDIA Canary-Qwen 2.5B (Gradio).
+Backend de transcripción multilingüe con NVIDIA Canary 1B v2 (Gradio).
 Sirve para un Hugging Face Space o para Google Colab.
 Expone la API  /transcribe  que usa index.html.
 """
@@ -10,7 +10,7 @@ import gradio as gr
 import librosa
 import soundfile as sf
 import torch
-from nemo.collections.speechlm2.models import SALM
+from nemo.collections.asr.models import ASRModel
 
 try:  # en ZeroGPU hace falta este decorador; en otros sitios no hace nada
     import spaces
@@ -19,34 +19,32 @@ except ImportError:
     def gpu(fn):
         return fn
 
+MODEL_NAME = "nvidia/canary-1b-v2"
 SR = 16000
-CHUNK_SECONDS = 30      # el modelo ve hasta ~40 s por bloque
+CHUNK_SECONDS = 30      # bloques de 30 s para mostrar el progreso
 BATCH = 8               # bloques procesados a la vez
 MAX_MINUTES = 120
-MAX_NEW_TOKENS = 384
+LANGS = ["es", "en", "fr", "de", "it", "pt"]
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"Cargando Canary-Qwen 2.5B en {device} ...")
-model = SALM.from_pretrained("nvidia/canary-qwen-2.5b")
-model = (model.bfloat16() if device == "cuda" else model).eval().to(device)
+print(f"Cargando {MODEL_NAME} en {device} ...")
+model = ASRModel.from_pretrained(MODEL_NAME).eval().to(device)
 print("Modelo listo.")
 
 
-def _run_batch(paths):
-    prompts = [[{
-        "role": "user",
-        "content": f"Transcribe the following: {model.audio_locator_tag}",
-        "audio": [p],
-    }] for p in paths]
+def _run_batch(paths, lang):
     with torch.inference_mode():
-        ids = model.generate(prompts=prompts, max_new_tokens=MAX_NEW_TOKENS)
-    return [model.tokenizer.ids_to_text(i.cpu()).strip() for i in ids]
+        out = model.transcribe(paths, source_lang=lang, target_lang=lang,
+                               batch_size=len(paths), verbose=False)
+    return [(getattr(o, "text", o) or "").strip() for o in out]
 
 
 @gpu
-def transcribe(audio):
+def transcribe(audio, lang="es"):
     if not audio:
         raise gr.Error("Sube o graba un audio primero.")
+    if lang not in LANGS:
+        raise gr.Error(f"Idioma no válido: {lang}")
 
     wav, _ = librosa.load(audio, sr=SR, mono=True)
     if len(wav) / SR > MAX_MINUTES * 60:
@@ -65,7 +63,7 @@ def transcribe(audio):
             paths.append(path)
 
         for b in range(0, len(paths), BATCH):
-            texts = _run_batch(paths[b:b + BATCH])
+            texts = _run_batch(paths[b:b + BATCH], lang)
             for j, text in enumerate(texts):
                 segments.append({"start": (b + j) * CHUNK_SECONDS, "text": text})
             yield {"done": len(segments), "total": len(paths), "segments": list(segments)}
@@ -73,10 +71,13 @@ def transcribe(audio):
 
 demo = gr.Interface(
     fn=transcribe,
-    inputs=gr.Audio(type="filepath", label="Audio"),
+    inputs=[
+        gr.Audio(type="filepath", label="Audio"),
+        gr.Dropdown(LANGS, value="es", label="Idioma del audio"),
+    ],
     outputs=gr.JSON(label="Transcripción"),
     api_name="transcribe",
-    title="Canary-Qwen 2.5B · Transcriptor (inglés)",
+    title="Canary 1B v2 · Transcriptor multilingüe",
     flagging_mode="never",
 )
 

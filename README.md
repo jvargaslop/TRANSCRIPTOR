@@ -1,10 +1,12 @@
-# Transcriptor web (sin instalar nada) · Canary-Qwen 2.5B
+# Transcriptor web en español (sin instalar nada) · NVIDIA Canary 1B v2
 
 Dos piezas:
 - `index.html` → página estática. Se aloja gratis en **GitHub Pages**.
 - `app.py` + `requirements.txt` + `packages.txt` → backend con GPU. Se ejecuta en la nube (Hugging Face o Colab), no en tu PC.
 
 El modelo necesita GPU, por eso no puede correr solo en GitHub Pages.
+
+Se usa **Canary 1B v2** porque Canary-Qwen 2.5B solo entiende inglés. Canary 1B v2 cubre 25 idiomas europeos; la página ofrece español, inglés, francés, alemán, italiano y portugués.
 
 ---
 
@@ -29,14 +31,14 @@ El modelo necesita GPU, por eso no puede correr solo en GitHub Pages.
 3. Ejecuta en una celda:
    ```
    !apt-get -qq install -y ffmpeg libsndfile1
-   !pip install -q "nemo_toolkit[asr,tts] @ git+https://github.com/NVIDIA/NeMo.git" gradio librosa soundfile
+   !pip install -q "nemo_toolkit[asr] @ git+https://github.com/NVIDIA/NeMo.git" gradio librosa soundfile
    !python app.py
    ```
 4. Al terminar de cargar aparece una línea `Running on public URL: https://xxxx.gradio.live`.
 5. Pega ese enlace en el campo "Backend" de la página. Dura mientras el cuaderno siga abierto (unas 72 h como máximo).
 
 ## Notas
-- El modelo transcribe **inglés**.
+- Elige siempre el idioma del audio en la página; el modelo no lo detecta solo.
 - Audios de hasta 120 min; se procesan en bloques de 30 s.
 - Si tu red de oficina bloquea `huggingface.co`, `gradio.live` o `cdn.jsdelivr.net`, la página no podrá conectar.
-- Si la instalación de NeMo falla, revisa el `requirements.txt` del Space oficial de NVIDIA: https://huggingface.co/spaces/nvidia/canary-qwen-2.5b
+- Si la instalación de NeMo falla, revisa el `requirements.txt` del Space oficial de NVIDIA: https://huggingface.co/nvidia/canary-1b-v2

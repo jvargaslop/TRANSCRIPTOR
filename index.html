@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Transcriptor · Canary-Qwen 2.5B</title>
+<title>Transcriptor · Canary 1B v2</title>
 <style>
   :root {
     --bg:#eef1f3; --panel:#fff; --ink:#14202b; --muted:#5d6b78; --line:#cfd7de;
@@ -23,6 +23,8 @@
   label.field { display:block; font-size:.9rem; color:var(--muted); margin-bottom:6px; }
   input[type=text] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px;
          background:var(--bg); color:var(--ink); font:inherit; }
+  select { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px;
+         background:var(--bg); color:var(--ink); font:inherit; margin-bottom:20px; }
   .hint { color:var(--muted); font-size:.85rem; margin:6px 0 20px; }
   .drop { border:2px dashed var(--line); border-radius:8px; padding:28px 16px; text-align:center; cursor:pointer; }
   .drop:hover,.drop.over { border-color:var(--accent); }
@@ -57,12 +59,22 @@
 <body>
 <main>
   <h1>Transcriptor de audio</h1>
-  <p class="sub">Convierte audio a texto con NVIDIA Canary-Qwen 2.5B, sin instalar nada.</p>
+  <p class="sub">Convierte audio a texto con NVIDIA Canary 1B v2, en español y otros idiomas, sin instalar nada.</p>
 
   <section class="panel">
     <label class="field" for="space">Backend (Space de Hugging Face o enlace gradio.live)</label>
     <input type="text" id="space" placeholder="tu-usuario/canary-transcriptor  o  https://xxxx.gradio.live" autocomplete="off">
     <p class="hint">Si el Space estaba dormido, la primera vez puede tardar varios minutos en arrancar.</p>
+
+    <label class="field" for="lang">Idioma del audio</label>
+    <select id="lang">
+      <option value="es" selected>Español</option>
+      <option value="en">Inglés</option>
+      <option value="fr">Francés</option>
+      <option value="de">Alemán</option>
+      <option value="it">Italiano</option>
+      <option value="pt">Portugués</option>
+    </select>
 
     <div class="drop" id="drop" tabindex="0" role="button" aria-label="Elegir archivo de audio">
       <strong>Arrastra un audio o haz clic para elegirlo</strong>
@@ -91,7 +103,7 @@
     <div class="panel" id="transcript"></div>
   </section>
 
-  <p class="note">Canary-Qwen 2.5B transcribe inglés. El audio se envía al backend que indiques arriba; no uses backends de terceros con audio confidencial.</p>
+  <p class="note">Elige el idioma correcto antes de transcribir. El audio se envía al backend que indiques arriba; no uses backends de terceros con audio confidencial.</p>
 </main>
 
 <script type="module">
@@ -176,7 +188,7 @@ goBtn.addEventListener('click', async () => {
     setStatus('Conectando con el backend (si estaba dormido puede tardar unos minutos)…');
     const client = await Client.connect(target);
     setStatus('Enviando audio y transcribiendo…');
-    const job = client.submit('/transcribe', [handle_file(audioFile)]);
+    const job = client.submit('/transcribe', [handle_file(audioFile), $('lang').value]);
 
     for await (const msg of job) {
       if (msg.type === 'status' && msg.stage === 'error') throw new Error(msg.message || 'Error en el backend');
