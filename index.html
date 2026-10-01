@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transcriptor · Canary-Qwen 2.5B</title>
+<style>
+  :root {
+    --bg:#eef1f3; --panel:#fff; --ink:#14202b; --muted:#5d6b78; --line:#cfd7de;
+    --accent:#5f9400; --accent-ink:#fff; --danger:#b3261e; --rec:#d3302f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#11171c; --panel:#1a2229; --ink:#e8edf1; --muted:#93a1ad; --line:#2f3b45;
+            --accent:#8cc63f; --accent-ink:#11171c; --danger:#ff8a80; --rec:#ff6b66; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); padding:32px 16px 64px;
+         font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:760px; margin:0 auto; }
+  h1 { font:600 2rem/1.15 Georgia,"Times New Roman",serif; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 24px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:20px; }
+  label.field { display:block; font-size:.9rem; color:var(--muted); margin-bottom:6px; }
+  input[type=text] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px;
+         background:var(--bg); color:var(--ink); font:inherit; }
+  .hint { color:var(--muted); font-size:.85rem; margin:6px 0 20px; }
+  .drop { border:2px dashed var(--line); border-radius:8px; padding:28px 16px; text-align:center; cursor:pointer; }
+  .drop:hover,.drop.over { border-color:var(--accent); }
+  .drop strong { display:block; }
+  .drop span { color:var(--muted); font-size:.9rem; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:16px; }
+  button { font:500 .95rem system-ui,sans-serif; padding:10px 16px; border-radius:8px; cursor:pointer;
+           border:1px solid var(--line); background:var(--panel); color:var(--ink); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:700; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.recording { border-color:var(--rec); color:var(--rec); }
+  :focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--rec); margin-right:8px; animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:.25; } }
+  @media (prefers-reduced-motion: reduce) { .dot { animation:none; } }
+  .file { color:var(--muted); font-size:.9rem; overflow-wrap:anywhere; }
+  audio { width:100%; margin-top:16px; }
+  .bar { height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin-top:16px; display:none; }
+  .bar i { display:block; height:100%; width:0; background:var(--accent); transition:width .3s; }
+  #status { margin-top:10px; color:var(--muted); font-size:.9rem; min-height:1.4em; }
+  #status.error { color:var(--danger); }
+  .result { margin-top:24px; display:none; }
+  .result header { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  .result h2 { font:600 1.25rem Georgia,serif; margin:0; }
+  .seg { display:grid; grid-template-columns:56px 1fr; gap:12px; padding:8px 0; border-top:1px solid var(--line); max-width:68ch; }
+  .seg:first-child { border-top:0; }
+  .seg time { color:var(--muted); font-variant-numeric:tabular-nums; font-size:.85rem; padding-top:3px; }
+  .seg p { margin:0; font:1.05rem/1.6 Georgia,serif; }
+  .note { color:var(--muted); font-size:.85rem; margin-top:20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Transcriptor de audio</h1>
+  <p class="sub">Convierte audio a texto con NVIDIA Canary-Qwen 2.5B, sin instalar nada.</p>
+
+  <section class="panel">
+    <label class="field" for="space">Backend (Space de Hugging Face o enlace gradio.live)</label>
+    <input type="text" id="space" placeholder="tu-usuario/canary-transcriptor  o  https://xxxx.gradio.live" autocomplete="off">
+    <p class="hint">Si el Space estaba dormido, la primera vez puede tardar varios minutos en arrancar.</p>
+
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Elegir archivo de audio">
+      <strong>Arrastra un audio o haz clic para elegirlo</strong>
+      <span>WAV, MP3, M4A, FLAC, OGG, WEBM…</span>
+      <input type="file" id="fileInput" accept="audio/*,video/*" hidden>
+    </div>
+
+    <div class="row">
+      <button id="recBtn" type="button">Grabar con el micrófono</button>
+      <span class="file" id="fileName">Ningún audio seleccionado</span>
+    </div>
+    <audio id="player" controls hidden></audio>
+    <div class="row"><button id="goBtn" class="primary" type="button" disabled>Transcribir</button></div>
+    <div class="bar" id="bar"><i id="barFill"></i></div>
+    <div id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="result" id="result">
+    <header>
+      <h2>Transcripción</h2>
+      <div class="row" style="margin:0">
+        <button id="copyBtn" type="button">Copiar texto</button>
+        <button id="dlBtn" type="button">Descargar .txt</button>
+      </div>
+    </header>
+    <div class="panel" id="transcript"></div>
+  </section>
+
+  <p class="note">Canary-Qwen 2.5B transcribe inglés. El audio se envía al backend que indiques arriba; no uses backends de terceros con audio confidencial.</p>
+</main>
+
+<script type="module">
+import { Client, handle_file } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
+
+const $ = id => document.getElementById(id);
+const drop = $('drop'), fileInput = $('fileInput'), goBtn = $('goBtn'), recBtn = $('recBtn'),
+      player = $('player'), statusEl = $('status'), bar = $('bar'), barFill = $('barFill'),
+      result = $('result'), transcript = $('transcript'), spaceInput = $('space');
+
+let audioFile = null, recorder = null, recChunks = [], recTimer = null, segments = [];
+
+try { spaceInput.value = localStorage.getItem('space') || ''; } catch {}
+
+const setStatus = (msg, err = false) => { statusEl.textContent = msg; statusEl.classList.toggle('error', err); };
+const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+
+function setAudio(file) {
+  audioFile = file;
+  $('fileName').textContent = file.name;
+  player.src = URL.createObjectURL(file);
+  player.hidden = false;
+  goBtn.disabled = false;
+  setStatus('');
+}
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+fileInput.addEventListener('change', () => fileInput.files[0] && setAudio(fileInput.files[0]));
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => e.dataTransfer.files[0] && setAudio(e.dataTransfer.files[0]));
+
+recBtn.addEventListener('click', async () => {
+  if (recorder && recorder.state === 'recording') { recorder.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recChunks = [];
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = e => e.data.size && recChunks.push(e.data);
+    recorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      clearInterval(recTimer);
+      recBtn.classList.remove('recording');
+      recBtn.textContent = 'Grabar con el micrófono';
+      const type = recorder.mimeType || 'audio/webm';
+      setAudio(new File(recChunks, `grabacion.${type.includes('mp4') ? 'm4a' : 'webm'}`, { type }));
+    };
+    recorder.start();
+    const t0 = Date.now();
+    recBtn.classList.add('recording');
+    recBtn.innerHTML = '<span class="dot"></span>Detener (00:00)';
+    recTimer = setInterval(() => {
+      recBtn.innerHTML = `<span class="dot"></span>Detener (${fmt(Math.floor((Date.now() - t0) / 1000))})`;
+    }, 250);
+  } catch {
+    setStatus('No se pudo acceder al micrófono. Revisa los permisos del navegador.', true);
+  }
+});
+
+function render() {
+  transcript.innerHTML = '';
+  for (const s of segments) {
+    const div = document.createElement('div'); div.className = 'seg';
+    const t = document.createElement('time'); t.textContent = fmt(s.start);
+    const p = document.createElement('p'); p.textContent = s.text || '(sin voz detectada)';
+    div.append(t, p); transcript.appendChild(div);
+  }
+}
+
+goBtn.addEventListener('click', async () => {
+  const target = spaceInput.value.trim();
+  if (!target) { setStatus('Escribe el Space o el enlace del backend.', true); spaceInput.focus(); return; }
+  try { localStorage.setItem('space', target); } catch {}
+
+  goBtn.disabled = true; recBtn.disabled = true;
+  segments = []; render();
+  result.style.display = 'block';
+  bar.style.display = 'block'; barFill.style.width = '3%';
+
+  try {
+    setStatus('Conectando con el backend (si estaba dormido puede tardar unos minutos)…');
+    const client = await Client.connect(target);
+    setStatus('Enviando audio y transcribiendo…');
+    const job = client.submit('/transcribe', [handle_file(audioFile)]);
+
+    for await (const msg of job) {
+      if (msg.type === 'status' && msg.stage === 'error') throw new Error(msg.message || 'Error en el backend');
+      if (msg.type === 'data' && msg.data && msg.data[0]) {
+        const d = msg.data[0];
+        segments = d.segments || [];
+        render();
+        barFill.style.width = `${Math.round((d.done / d.total) * 100)}%`;
+        setStatus(`Bloque ${d.done} de ${d.total}`);
+      }
+    }
+    setStatus('Listo.');
+    setTimeout(() => { bar.style.display = 'none'; }, 600);
+  } catch (err) {
+    setStatus(`No se pudo transcribir: ${err.message || err}`, true);
+    bar.style.display = 'none';
+  } finally {
+    goBtn.disabled = false; recBtn.disabled = false;
+  }
+});
+
+$('copyBtn').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(segments.map(s => s.text).filter(Boolean).join(' ')); setStatus('Texto copiado.'); }
+  catch { setStatus('No se pudo copiar automáticamente.', true); }
+});
+$('dlBtn').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([segments.map(s => `[${fmt(s.start)}] ${s.text}`).join('\n')], { type: 'text/plain;charset=utf-8' }));
+  a.download = ((audioFile?.name || '').replace(/\.[^.]+$/, '') || 'transcripcion') + '.txt';
+  a.click(); URL.revokeObjectURL(a.href);
+});
+</script>
+</body>
+</html>
